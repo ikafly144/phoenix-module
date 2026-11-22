@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">Phoenix Module</string>
-    <string-array name="xposed_scope">
-        <item>com.discord</item>
-    </string-array>
 </resources>
