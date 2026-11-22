@@ -4,9 +4,9 @@ on:
   push:
     branches: ['**']
     tags: ['v*']
-    paths-ignore: ['**.md', 'assets/**', '.idea/**']
+    paths-ignore: ['.idea/**']
   pull_request:
-    paths-ignore: ['**.md', 'assets/**', '.idea/**']
+    paths-ignore: ['.idea/**']
   workflow_dispatch:
 
 concurrency:
@@ -48,13 +48,18 @@ jobs:
       - name: Determine version
         id: version
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          DATE_COMPACT="$(date -u +%Y%m%d)"
+          DATE_ISO="$(date -u +%Y-%m-%d)"
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG_NAME="${GITHUB_REF#refs/tags/v}"
             echo "version_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           else
-            echo "version_name=1.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "version_name=1.0.0-nightly.${DATE_COMPACT}.${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           fi
           echo "version_code=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+          echo "nightly_tag=nightly-${DATE_COMPACT}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "nightly_title=Phoenix Module Nightly ${DATE_ISO} (${SHORT_SHA})" >> "$GITHUB_OUTPUT"
 
       - name: Decode keystore
         id: keystore
@@ -97,7 +102,7 @@ jobs:
           path: app/build/outputs/apk/*/*.apk
           if-no-files-found: error
 
-      - name: Create GitHub Release
+      - name: Create Stable GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,3 +112,23 @@ jobs:
               --title "$GITHUB_REF_NAME" \
               --generate-notes \
               app/build/outputs/apk/*/*.apk
+
+      - name: Create Nightly GitHub Release
+        if: >-
+          (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+          github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NIGHTLY_TAG: ${{ steps.version.outputs.nightly_tag }}
+          NIGHTLY_TITLE: ${{ steps.version.outputs.nightly_title }}
+        run: |
+          if gh release view "$NIGHTLY_TAG" >/dev/null 2>&1; then
+            gh release upload "$NIGHTLY_TAG" app/build/outputs/apk/*/*.apk --clobber
+          else
+            gh release create "$NIGHTLY_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$NIGHTLY_TITLE" \
+              --prerelease \
+              --generate-notes \
+              app/build/outputs/apk/*/*.apk
+          fi

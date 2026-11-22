@@ -1218,7 +1218,7 @@ int phoenix_resolve_elf(
 
         const char *sname = (const char *)(data + shstr_off + name_idx);
         size_t max_nlen = (size_t)(shstr_size - name_idx);
-        if (strnlen(sname, max_nlen) == max_nlen) continue;
+        if (memchr(sname, '\0', max_nlen) == NULL) continue;
 
         if (strcmp(sname, ".rodata") == 0) {
             e.rodata = (elf_sec_t){ s_addr, s_off, s_size, 1 };
